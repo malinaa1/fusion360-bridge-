@@ -1,0 +1,12 @@
+{
+  "bridge_root": "C:\\Users\\tandu\\fusion360-bridge",
+  "scripts_dir": "C:\\Users\\tandu\\fusion360-bridge\\scripts",
+  "output_dir": "C:\\Users\\tandu\\fusion360-bridge\\output",
+  "logs_dir": "C:\\Users\\tandu\\fusion360-bridge\\logs",
+  "poll_interval_ms": 500,
+  "file_watch_interval_s": 1.0,
+  "timeout_s": 120,
+  "addin_guid": "ClaudeBridgeAddIn",
+  "addin_name": "Claude Bridge",
+  "description": "Bridge between Claude AI and Fusion 360 for automated CAD modeling"
+}
