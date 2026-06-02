@@ -279,4 +279,4 @@ def involute_xy(rb, theta):
 
 ---
 
-*本文档由 Claude 根据官方资料和 gear_v14.py 实战经验整理*
+

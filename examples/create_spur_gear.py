@@ -18,7 +18,7 @@ Each tooth space is a properly closed 6-curve loop:
   5. radial line (base → root)
   6. root arc
 
-Author: Claude AI Assistant
+
 License: MIT
 """
 

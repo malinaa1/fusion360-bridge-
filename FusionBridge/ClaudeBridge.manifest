@@ -2,9 +2,9 @@
     "autodeskProduct": "Fusion",
     "type": "addin",
     "id": "d36c54d0-ae7c-435d-9a01-31213ea8e997",
-    "author": "Claude AI",
+    "author": "",
     "description": {
-        "": "Bridge between Claude AI assistant and Fusion 360 for automated modeling. Watches a scripts folder and executes Python scripts in Fusion 360 context."
+        "": "File-watching bridge for automated Fusion 360 script execution."
     },
     "version": "1.0.0",
     "runOnStartup": true,

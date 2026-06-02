@@ -1,5 +1,5 @@
 """
-Claude Bridge — Fusion 360 Add-in
+Fusion360 Bridge Add-in
 ===================================
 Automatically watches a folder for Python scripts and executes them
 inside Fusion 360's Python environment.
@@ -8,7 +8,7 @@ Scripts dropped into the ``scripts/`` folder are picked up, executed
 in Fusion 360's context (main thread), and their output is written
 back to ``output/`` as JSON result files.
 
-Author: Claude AI Assistant
+
 Version: 1.0.0
 """
 
@@ -217,7 +217,7 @@ def run(context):
     _app = adsk.core.Application.get()
 
     _log("=" * 60)
-    _log("Claude Bridge Add-in starting up.")
+    _log("Bridge Add-in starting up.")
     _log(f"Bridge root : {BRIDGE_ROOT}")
     _log(f"Scripts dir : {SCRIPTS_DIR}")
     _log(f"Output dir  : {OUTPUT_DIR}")
@@ -226,7 +226,7 @@ def run(context):
 
     # Start file-watcher background thread
     watcher = threading.Thread(
-        target=_watch_folder, daemon=True, name="claude-bridge-watcher"
+        target=_watch_folder, daemon=True, name="bridge-watcher"
     )
     watcher.start()
 
@@ -236,7 +236,7 @@ def run(context):
     _handlers.append(_timer_handler)  # prevent GC
     ui.timerEvent.add(_timer_handler, 500)  # 500ms
 
-    _log("Claude Bridge Add-in started.")
+    _log("Bridge Add-in started.")
 
 
 def stop(context):
@@ -254,5 +254,5 @@ def stop(context):
         _handlers.remove(_timer_handler)
         _timer_handler = None
 
-    _log("Claude Bridge Add-in stopped.")
+    _log("Bridge Add-in stopped.")
     _log("=" * 60)

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Claude Bridge CLI — Send scripts to Fusion 360 and read results.
+Fusion360 Bridge CLI — Send scripts to Fusion 360 and read results.
 
 Usage (command line)::
 
@@ -25,7 +25,7 @@ Usage (Python API)::
     result = client.wait_for(task_id, timeout=60)
     print(result["stdout"])
 
-Author: Claude AI Assistant
+
 """
 
 import os
@@ -65,7 +65,7 @@ if os.path.exists(CONFIG_PATH):
 
 class BridgeClient:
     """
-    Client for communicating with the Fusion 360 Claude Bridge add-in.
+    Client for communicating with the Fusion 360 Bridge add-in.
 
     Scripts written to ``scripts_dir`` are automatically picked up and
     executed by the add-in running inside Fusion 360. Results are written
@@ -300,7 +300,7 @@ class BridgeClient:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Claude Bridge CLI — Send scripts to Fusion 360 and read results.",
+        description="Fusion360 Bridge CLI — Send scripts to Fusion 360 and read results.",
     )
     sub = parser.add_subparsers(dest="command", help="Available commands")
 

@@ -1,10 +1,10 @@
-# Claude Bridge — AI 驱动的 Fusion 360 自动化建模
+# Fusion360 Bridge — Fusion 360 自动化建模桥接系统
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Fusion 360](https://img.shields.io/badge/Fusion%20360-v2703-blue)](https://www.autodesk.com/products/fusion-360/)
 [![Python](https://img.shields.io/badge/Python-3.14-3776AB)](https://www.python.org/)
 
-让 **Claude AI** 通过文件系统桥接直接操控 **Fusion 360**，实现自然语言驱动的 CAD 建模。
+让 **AI** 通过文件系统桥接直接操控 **Fusion 360**，实现自然语言驱动的 CAD 建模。
 
 > "帮我在 Fusion 360 里画一个模数 3mm、20 齿的渐开线齿轮" → 自动生成并执行
 
@@ -14,7 +14,7 @@
 
 ```
 ┌──────────┐   写入 .py 脚本   ┌──────────────┐   自动执行   ┌─────────────┐
-│  Claude  │ ───────────────→ │  scripts/    │ ──────────→ │ Fusion 360  │
+│  AI     │ ───────────────→ │  scripts/    │ ──────────→ │ Fusion 360  │
 │  (AI)    │                  │  (监控目录)   │             │ Add-in      │
 │          │ ←─────────────── │  output/     │ ←────────── │ (主线程)     │
 └──────────┘   读取 JSON 结果  └──────────────┘   写入结果   └─────────────┘
@@ -30,12 +30,12 @@
 
 ```powershell
 # 复制到 Fusion 360 Add-ins 目录
-$dest = "$env:APPDATA\Autodesk\Autodesk Fusion 360\API\AddIns\ClaudeBridge"
+$dest = "$env:APPDATA\Autodesk\Autodesk Fusion 360\API\AddIns\FusionBridge"
 New-Item -ItemType Directory -Force -Path $dest
-Copy-Item "ClaudeBridge\*" $dest
+Copy-Item "FusionBridge\*" $dest
 ```
 
-重启 Fusion 360 → `Shift+S` → Add-Ins 标签 → 找到 **Claude Bridge** → Run → 勾选 `Run on Startup`
+重启 Fusion 360 → `Shift+S` → Add-Ins 标签 → 找到 **FusionBridge** → Run → 勾选 `Run on Startup`
 
 ### 2. 发送第一个脚本
 
@@ -121,9 +121,9 @@ result = client.wait_for(task_id, timeout=60)
 
 ```
 fusion360-bridge/
-├── ClaudeBridge/                    # Fusion 360 Add-in
-│   ├── ClaudeBridge.manifest        #   JSON 格式清单
-│   └── ClaudeBridge.py              #   Add-in 主代码 (监控+执行)
+├── FusionBridge/                    # Fusion 360 Add-in
+│   ├── FusionBridge.manifest        #   JSON 格式清单
+│   └── FusionBridge.py              #   Add-in 主代码 (监控+执行)
 ├── bridge_cli.py                    # CLI 工具 & Python SDK
 ├── config.json                      # 配置文件
 ├── examples/                        # 示例脚本
@@ -177,4 +177,4 @@ MIT — 详见 [LICENSE](LICENSE)
 
 ---
 
-*Built with Claude AI × Fusion 360 API*
+*Built with × Fusion 360 API*

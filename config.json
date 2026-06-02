@@ -6,7 +6,7 @@
   "poll_interval_ms": 500,
   "file_watch_interval_s": 1.0,
   "timeout_s": 120,
-  "addin_guid": "ClaudeBridgeAddIn",
-  "addin_name": "Claude Bridge",
-  "description": "Bridge between Claude AI and Fusion 360 for automated CAD modeling"
+  "addin_guid": "FusionBridgeAddIn",
+  "addin_name": "FusionBridge",
+  "description": "File-watching bridge for automated Fusion 360 script execution"
 }

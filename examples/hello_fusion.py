@@ -11,7 +11,7 @@ try:
     version = app.version
     build = app.build
 
-    print(f"✅ Claude Bridge 连接正常!")
+    print(f"✅ Fusion360 Bridge 连接正常!")
     print(f"Fusion 360 版本: {version}")
     print(f"Build: {build}")
 
@@ -24,7 +24,7 @@ try:
             print(f"根组件: {design.rootComponent.name}")
 
     ui.messageBox(
-        f"Claude Bridge 连接成功!\\n\\n"
+        f"Fusion360 Bridge 连接成功!\\n\\n"
         f"Fusion 360 v{version}\\n"
         f"Build {build}",
         "✅ Bridge OK"
