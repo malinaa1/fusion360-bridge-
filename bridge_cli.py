@@ -41,7 +41,7 @@ from typing import Optional, Dict, Any
 # ---------------------------------------------------------------------------
 # Default paths
 # ---------------------------------------------------------------------------
-BRIDGE_ROOT = os.path.expanduser(r"~\fusion360-bridge")
+BRIDGE_ROOT = r"D:\MOD\fusion360-bridge"
 SCRIPTS_DIR = os.path.join(BRIDGE_ROOT, "scripts")
 OUTPUT_DIR  = os.path.join(BRIDGE_ROOT, "output")
 DONE_DIR    = os.path.join(BRIDGE_ROOT, "scripts", "done")
