@@ -103,29 +103,29 @@ def run(context):
         bushing_ext.name = "Bushing Body"
         print("Bushing component created.")
 
-        # ---- Step 5: Create revolute joint between shaft and bushing ----
-        # Get planar faces for joint origins
-        shaft_face = shaft_comp.bRepBodies.item(0).faces.item(2)  # cylindrical face
-        bushing_face = bushing_comp.bRepBodies.item(0).faces.item(2)
+        # ---- Step 5: Create revolute joint (with error guard) ----
+        try:
+            shaft_face = shaft_comp.bRepBodies.item(0).faces.item(2)
+            bushing_face = bushing_comp.bRepBodies.item(0).faces.item(2)
 
-        # Create joint origins
-        so = shaft_comp.jointOrigins.createInput(shaft_face)
-        shaft_joint_origin = shaft_comp.jointOrigins.add(so)
+            so = shaft_comp.jointOrigins.createInput(shaft_face)
+            shaft_joint_origin = shaft_comp.jointOrigins.add(so)
 
-        bo = bushing_comp.jointOrigins.createInput(bushing_face)
-        bushing_joint_origin = bushing_comp.jointOrigins.add(bo)
+            bo = bushing_comp.jointOrigins.createInput(bushing_face)
+            bushing_joint_origin = bushing_comp.jointOrigins.add(bo)
 
-        # Create revolute joint input
-        joint_input = root.asmJoints.createInput(
-            shaft_occurrence, shaft_joint_origin,  # component 1 + origin
-            bushing_occurrence, bushing_joint_origin  # component 2 + origin
-        )
-        joint_input.isFlipped = False
-        joint_input.jointMotionType = adsk.fusion.JointTypes.RevoluteJointType
+            joint_input = root.asmJoints.createInput(
+                shaft_occurrence, shaft_joint_origin,
+                bushing_occurrence, bushing_joint_origin
+            )
+            joint_input.isFlipped = False
+            joint_input.jointMotionType = adsk.fusion.JointTypes.RevoluteJointType
 
-        revolute_joint = root.asmJoints.add(joint_input)
-        revolute_joint.name = "Shaft-Bushing Revolute"
-        print("Revolute joint created.")
+            revolute_joint = root.asmJoints.add(joint_input)
+            revolute_joint.name = "Shaft-Bushing Revolute"
+            print("Revolute joint created.")
+        except Exception as e:
+            print(f"Joint skipped (needs valid faces): {e}")
 
         # ---- Done ----
         print("=" * 50)
@@ -137,3 +137,7 @@ def run(context):
     except:
         if ui:
             ui.messageBox('Failed:\n{}'.format(traceback.format_exc()))
+
+# Auto-execute for both Bridge and standalone use
+if __name__ in ("__main__", "__fusion_bridge__"):
+    run(None)

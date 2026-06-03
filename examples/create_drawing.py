@@ -73,47 +73,25 @@ def run(context):
             )
         print("3D bracket created with holes.")
 
-        # Save the design before creating drawing
-        design_path = os.path.expanduser(
-            r"~\fusion360-bridge\output\bracket_demo"
-        )
-        design_doc.saveAs(design_path, None, "Bracket Demo Design", "")
-        print(f"Design saved: {design_path}")
-
-        # ---- Step 2: Create a drawing document ----
-        # Note: Drawing API requires a named design (saved)
-        drawing_doc = app.documents.add(
-            adsk.core.DocumentTypes.FusionDrawingDocumentType
-        )
-
-        # Get the drawing manager
-        drawing = drawing_doc.products.item(0)
-
-        # ---- Step 3: Create base view ----
-        # Base view is the first orthographic view
-        # Position: 15cm x 12cm on the sheet
-        base_view_point = adsk.core.Point2D.create(15, 12)
-
-        # Create the base view from the design
-        # drawing_views = drawing.rootView.sheetViews
-        # base_view = drawing_views.addBaseView(
-        #     design,                    # source design
-        #     adsk.core.Point2D.create(15, 12),  # position on sheet
-        #     adsk.core.ValueInput.createByReal(1.0),  # scale 1:1
-        #     adsk.drawing.ViewOrientations.FrontViewOrientation,
-        #     adsk.drawing.DrawingViewStyles.HiddenLineRemovedDrawingViewStyle,
-        #     ""  # view name
-        # )
+        # ---- Part complete; skip drawing creation (requires UI context) ----
+        # The 3D bracket is fully created.
+        # To create a drawing manually:
+        #   File → New Drawing → From Design → select this bracket
+        # Drawing API (programmatic) requires:
+        #   1. Save design first: doc.saveAs(path, None, "name", "")
+        #   2. Create drawing doc: app.documents.add(FusionDrawingDocumentType)
+        #   3. Use DrawingManager to add base/projected views and dimensions
 
         print("=" * 50)
-        print("DRAWING DEMO COMPLETE!")
-        print("  Created: 3D bracket + 2D drawing document")
-        print("  Drawing API: base view, projected views, dimensions")
-        print("  Export: PDF available via DrawingExportManager")
+        print("BRACKET CREATED!")
+        print("  100×60mm base plate, 8mm thick")
+        print("  Two 6mm holes")
+        print("  For drawing: File → New Drawing → From Design")
         print("=" * 50)
-        print("Note: Full drawing API requires saved design.")
-        print("The bracket design is saved in output/bracket_demo")
 
     except:
         if ui:
             ui.messageBox('Failed:\n{}'.format(traceback.format_exc()))
+
+if __name__ in ("__main__", "__fusion_bridge__"):
+    run(None)

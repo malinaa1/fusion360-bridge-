@@ -96,60 +96,38 @@ def run(context):
 
         print("Part created: Stock + Pocket + Boss island")
 
-        # ---- Step 2: CAM Setup (if available) ----
+        # ---- Step 2: CAM (if available and licensed) ----
         if HAS_CAM:
-            cam_mgr = adsk.cam.CAMManager.get()
+            try:
+                cam_mgr = adsk.cam.CAMManager.get()
+                if cam_mgr is None:
+                    print("CAMManager not available (no Manufacturing workspace)")
+                else:
+                    # Setup
+                    setup_input = cam_mgr.setupOperations.createInput(
+                        adsk.cam.OperationTypes.SetupOperation
+                    )
+                    setup_input.wcsOriginPoint = adsk.core.Point3D.create(0, 0, 2.0)
+                    setup = cam_mgr.setupOperations.add(setup_input)
+                    setup.name = "Setup1"
 
-            # Create a new setup
-            setup_input = cam_mgr.setupOperations.createInput(
-                adsk.cam.OperationTypes.SetupOperation
-            )
+                    # Pocket
+                    pocket_input = cam_mgr.pocket2DOperations.createInput(
+                        adsk.cam.OperationTypes.Pocket2DOperation
+                    )
+                    pocket_op = cam_mgr.pocket2DOperations.add(pocket_input)
+                    pocket_op.name = "Rough Pocket"
+                    print(f"Pocket op: {pocket_op.name}")
 
-            # Define the setup
-            # setup_input.stockMode = adsk.cam.SetupStockModes.RelativeBoxStockMode
-            # setup_input.stockOffsetX = adsk.core.ValueInput.createByReal(0.5)  # 5mm extra
-
-            # Set WCS origin (top of stock, center)
-            setup_input.wcsOriginPoint = adsk.core.Point3D.create(0, 0, 2.0)
-
-            setup = cam_mgr.setupOperations.add(setup_input)
-            setup.name = "Setup1 - Pocket+Contour"
-            print(f"Setup created: {setup.name}")
-
-            # ---- Step 3: 2D Pocket Operation ----
-            # Select the pocket floor face
-            pocket_floor = pocket_ext.faces.item(0)
-
-            pocket_input = cam_mgr.pocket2DOperations.createInput(
-                adsk.cam.OperationTypes.Pocket2DOperation
-            )
-            # pocket_input.pocketSelection = pocket_floor
-            # pocket_input.maximumStepdown = adsk.core.ValueInput.createByReal(0.3)  # 3mm DOC
-
-            pocket_op = cam_mgr.pocket2DOperations.add(pocket_input)
-            pocket_op.name = "Rough Pocket"
-            print(f"Pocket op created: {pocket_op.name}")
-
-            # ---- Step 4: 2D Contour for the boss ----
-            # Select boss walls
-            contour_input = cam_mgr.contour2DOperations.createInput(
-                adsk.cam.OperationTypes.Contour2DOperation
-            )
-            contour_op = cam_mgr.contour2DOperations.add(contour_input)
-            contour_op.name = "Finish Contour"
-            print(f"Contour op created: {contour_op.name}")
-
-            # ---- Step 5: Post-process ----
-            # Export G-code
-            gcode_path = os.path.expanduser(
-                r"~\fusion360-bridge\output\bracket.nc"
-            )
-            # post_input = cam_mgr.postProcess.createInput(
-            #     adsk.cam.PostProcessInput.GenericPost
-            # )
-            # post_input.outputFile = gcode_path
-            # post_input.openInEditor = False
-            # cam_mgr.postProcess.execute(post_input)
+                    # Contour
+                    contour_input = cam_mgr.contour2DOperations.createInput(
+                        adsk.cam.OperationTypes.Contour2DOperation
+                    )
+                    contour_op = cam_mgr.contour2DOperations.add(contour_input)
+                    contour_op.name = "Finish Contour"
+                    print(f"Contour op: {contour_op.name}")
+            except Exception as e:
+                print(f"CAM setup skipped: {e}")
 
         print("=" * 50)
         print("CAM DEMO COMPLETE!")
@@ -163,3 +141,6 @@ def run(context):
     except:
         if ui:
             ui.messageBox('Failed:\n{}'.format(traceback.format_exc()))
+
+if __name__ in ("__main__", "__fusion_bridge__"):
+    run(None)

@@ -129,3 +129,6 @@ def run(context):
     except:
         if ui:
             ui.messageBox('Failed:\n{}'.format(traceback.format_exc()))
+
+if __name__ in ("__main__", "__fusion_bridge__"):
+    run(None)
