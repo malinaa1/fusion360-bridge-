@@ -269,14 +269,270 @@ def involute_xy(rb, theta):
 
 ---
 
-## 九、学习资源
+## 九、装配体操作 (Assembly)
+
+### 核心概念
+
+装配体由多个 **Component** 通过 **Joints** 连接而成：
+
+```
+rootComponent                    ← 顶层装配体
+ ├─ occurrences                  ← 子组件实例集合
+ │   ├─ occurrence[0] → Component A
+ │   └─ occurrence[1] → Component B
+ ├─ asmJoints                    ← 装配关节集合
+ └─ jointOrigins                  ← 关节原点集合
+```
+
+### 创建子组件
+
+```python
+# 方式1：创建空组件
+occurrence = root.occurrences.addNewComponent(adsk.core.Matrix3D.create())
+comp = occurrence.component
+comp.name = "MyPart"
+# ... 往 comp 中添加草图和特征 ...
+
+# 方式2：插入外部设计
+occurrence = root.occurrences.addByInsert(
+    external_design,
+    adsk.core.Matrix3D.create()
+)
+```
+
+### 定位组件
+
+```python
+# 通过 transform 矩阵移动组件
+transform = adsk.core.Matrix3D.create()
+transform.translation = adsk.core.Vector3D.create(x, y, z)
+occurrence.transform = transform
+```
+
+### 创建关节 (Joint)
+
+```python
+# 1. 在两个组件上创建关节原点
+origin_input = component.jointOrigins.createInput(face)
+origin_a = component.jointOrigins.add(origin_input)
+
+# 2. 创建关节
+joint_input = root.asmJoints.createInput(
+    occurrence_a, origin_a,
+    occurrence_b, origin_b
+)
+joint_input.jointMotionType = JointTypes.RevoluteJointType  # 旋转关节
+# 也可用: RigidJointType (固定), SliderJointType (滑动)
+
+joint = root.asmJoints.add(joint_input)
+```
+
+### 关节类型
+
+| 类型 | 自由度 | 用途 |
+|------|--------|------|
+| `RigidJointType` | 0 | 固定连接 |
+| `RevoluteJointType` | 1 (旋转) | 铰链、轴承 |
+| `SliderJointType` | 1 (平移) | 导轨、滑块 |
+| `CylindricalJointType` | 2 | 轴套 |
+| `BallJointType` | 3 | 球铰 |
+
+### 示例
+
+运行 `examples/create_assembly.py` → 创建底板+轴+轴套的装配体
+
+---
+
+## 十、曲面建模 (Surface Modeling)
+
+### 放样 (Loft)
+
+在多个轮廓之间创建过渡曲面：
+
+```python
+loft_input = root.features.loftFeatures.createInput(
+    adsk.fusion.FeatureOperations.NewBodyFeatureOperation
+)
+# 按顺序添加轮廓
+loft_input.loftSections.add(sketch_bottom.profiles.item(0))
+loft_input.loftSections.add(sketch_middle.profiles.item(0))
+loft_input.loftSections.add(sketch_top.profiles.item(0))
+loft_input.isSolid = True  # 实体还是曲面
+loft = root.features.loftFeatures.add(loft_input)
+```
+
+### 扫掠 (Sweep)
+
+沿路径扫掠轮廓：
+
+```python
+sweep_input = root.features.sweepFeatures.createInput(
+    profile,        # 要扫掠的轮廓
+    path_curve,     # 路径曲线
+    FeatureOperations.NewBodyFeatureOperation
+)
+sweep = root.features.sweepFeatures.add(sweep_input)
+```
+
+### 构造平面 (Construction Plane)
+
+在 3D 空间创建草图平面：
+
+```python
+# 偏移平面
+plane_input = root.constructionPlanes.createInput()
+plane_input.setByOffset(reference_plane, ValueInput.createByReal(offset))
+new_plane = root.constructionPlanes.add(plane_input)
+
+# 在偏移平面上创建草图
+sketch = root.sketches.add(new_plane)
+```
+
+### 示例
+
+运行 `examples/surface_modeling.py` → 用 Loft + Sweep 创建瓶子造型
+
+---
+
+## 十一、工程图 (Drawing)
+
+### 创建工程图文档
+
+```python
+# 先保存设计
+design_doc.saveAs(path, None, "Part Name", "")
+
+# 创建工程图文档
+drawing_doc = app.documents.add(
+    adsk.core.DocumentTypes.FusionDrawingDocumentType
+)
+```
+
+### 视图管理
+
+```python
+drawing = drawing_doc.products.item(0)
+sheet = drawing.rootView  # 图纸
+
+# 创建基础视图
+base_view = sheet.sheetViews.addBaseView(
+    source_design,     # 源 3D 设计
+    Point2D.create(x, y),  # 图纸位置
+    ValueInput.createByReal(scale),  # 比例
+    ViewOrientations.FrontViewOrientation,
+    DrawingViewStyles.VisibleEdgesDrawingViewStyle,
+    "View Name"
+)
+
+# 创建投影视图
+projected_view = sheet.sheetViews.addProjectedView(
+    base_view,
+    Point2D.create(x, y),
+    ViewOrientations.TopViewOrientation
+)
+```
+
+### 尺寸标注
+
+```python
+drawing_curves = base_view.drawingCurves
+dims = sheet.drawingDimensions
+
+# 通用尺寸
+dims.addGeneralDimension(
+    drawing_curves.item(0),  # 标注对象
+    Point2D.create(x, y)     # 位置
+)
+```
+
+### 导出 PDF
+
+```python
+export_mgr = drawing_doc.products.item(0).exportManager
+pdf_opts = export_mgr.createPDFExportOptions(output_path)
+export_mgr.execute(pdf_opts)
+```
+
+### 示例
+
+运行 `examples/create_drawing.py` → 创建支架零件并生成工程图
+
+---
+
+## 十二、CAM 刀路规划
+
+### CAM 模块
+
+```python
+import adsk.cam  # 需要 Manufacturing 许可证
+
+cam_mgr = adsk.cam.CAMManager.get()
+```
+
+### 创建 Setup
+
+```python
+setup_input = cam_mgr.setupOperations.createInput(
+    adsk.cam.OperationTypes.SetupOperation
+)
+# 设置毛坯模式
+setup_input.stockMode = SetupStockModes.RelativeBoxStockMode
+# 设置工件坐标系原点
+setup_input.wcsOriginPoint = Point3D.create(0, 0, 0)
+setup = cam_mgr.setupOperations.add(setup_input)
+```
+
+### 2D Pocket 铣削
+
+```python
+pocket_input = cam_mgr.pocket2DOperations.createInput(
+    adsk.cam.OperationTypes.Pocket2DOperation
+)
+# 选择加工面、设置切削参数
+pocket_input.maximumStepdown = ValueInput.createByReal(0.3)  # 每刀深度 3mm
+pocket = cam_mgr.pocket2DOperations.add(pocket_input)
+```
+
+### 2D Contour (轮廓铣削)
+
+```python
+contour_input = cam_mgr.contour2DOperations.createInput(
+    adsk.cam.OperationTypes.Contour2DOperation
+)
+contour = cam_mgr.contour2DOperations.add(contour_input)
+```
+
+### 后处理 (生成 G-code)
+
+```python
+post_input = cam_mgr.postProcess.createInput(
+    adsk.cam.PostProcessInput.GenericPost
+)
+post_input.outputFile = r"C:\output\part.nc"
+post_input.openInEditor = False
+cam_mgr.postProcess.execute(post_input)
+```
+
+### 常用操作类型
+
+| 操作 | 类 | 用途 |
+|------|-----|------|
+| 面铣 (Facing) | `FaceOperation` | 平面精加工 |
+| 袋铣 (Pocket) | `Pocket2DOperation` | 挖槽/内腔 |
+| 轮廓 (Contour) | `Contour2DOperation` | 外形精加工 |
+| 钻孔 (Drill) | `DrillOperation` | 钻孔 |
+| 自适应 (Adaptive) | `AdaptiveClearingOperation` | 高效粗加工 |
+
+### 示例
+
+运行 `examples/cam_toolpath.py` → 创建带槽零件并设置 CAM 刀路
+
+---
+
+## 十三、学习资源
 
 - **官方 API 参考**: `help.autodesk.com/view/fusion360/ENU/` → API Reference Manual
 - **对象模型 PDF**: 在官方帮助页面搜索 "Fusion 360 API Object Model"
 - **Autodesk 开发者博客**: `blog.autodesk.io`
 - **Fusion 360 API 论坛**: `forums.autodesk.com/t5/fusion-api-and-scripts-forum/`
 - **Maker Show 视频**: Microsoft Learn 搜索 "Intro to Fusion 360 API"
-
----
-
-
