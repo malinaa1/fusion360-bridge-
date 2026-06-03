@@ -127,6 +127,7 @@ def run(context):
         print("=" * 50)
 
     except:
+        import traceback; traceback.print_exc()
         if ui:
             ui.messageBox('Failed:\n{}'.format(traceback.format_exc()))
 

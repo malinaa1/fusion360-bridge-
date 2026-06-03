@@ -1,258 +1,225 @@
 """
-Fusion360 Bridge Add-in
-===================================
-Automatically watches a folder for Python scripts and executes them
-inside Fusion 360's Python environment.
+Fusion360 Bridge Add-in v2.0
+==============================
+MCP-compatible bridge: watches a single command file, executes scripts,
+writes results to a single response file.
 
-Scripts dropped into the ``scripts/`` folder are picked up, executed
-in Fusion 360's context (main thread), and their output is written
-back to ``output/`` as JSON result files.
+Communication:
+  ~/Documents/fusion360_command.txt   ← command (JSON)
+  ~/Documents/fusion360_response.txt  → result (JSON)
 
-
-Version: 1.0.0
+Much more reliable than directory-watching v1:
+  - Atomic single-file read/write
+  - No "seen set" confusion
+  - Proper state machine
+  - No orphaned script files
 """
 
 import adsk.core
 import adsk.fusion
-import adsk.cam
+
+try:
+    import adsk.cam
+    HAS_CAM = True
+except ImportError:
+    adsk.cam = None
+    HAS_CAM = False
+
 import traceback
 import threading
-import queue
 import time
 import os
 import sys
 import json
 import io
-import shutil
-from pathlib import Path
 
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-BRIDGE_ROOT = os.path.expanduser(r"~\fusion360-bridge")
-SCRIPTS_DIR = os.path.join(BRIDGE_ROOT, "scripts")
-OUTPUT_DIR  = os.path.join(BRIDGE_ROOT, "output")
-DONE_DIR    = os.path.join(BRIDGE_ROOT, "scripts", "done")
-LOG_DIR     = os.path.join(BRIDGE_ROOT, "logs")
+COMMAND_FILE  = os.path.expanduser("~/Documents/fusion360_command.txt")
+RESPONSE_FILE = os.path.expanduser("~/Documents/fusion360_response.txt")
+LOG_FILE      = os.path.expanduser("~/fusion360-bridge/logs/bridge.log")
+
+os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
 
 # ---------------------------------------------------------------------------
-# Globals — must keep references to handlers to prevent GC
+# Globals
 # ---------------------------------------------------------------------------
-_script_queue: queue.Queue = queue.Queue()
-_running: bool = False
-_timer_handler = None
-_app: adsk.core.Application = None
-_handlers = []  # keep-alive list for all event handlers
+_running = False
+_last_command_mtime = 0
+_app = None
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Logging
 # ---------------------------------------------------------------------------
-
-def _ensure_dirs():
-    for d in (SCRIPTS_DIR, OUTPUT_DIR, DONE_DIR, LOG_DIR):
-        os.makedirs(d, exist_ok=True)
-
-
-def _log(message: str):
-    ts = time.strftime("%Y-%m-%d %H:%M:%S")
-    log_path = os.path.join(LOG_DIR, "bridge.log")
+def _log(msg):
     try:
-        with open(log_path, "a", encoding="utf-8") as fh:
-            fh.write(f"[{ts}] {message}\n")
-    except Exception:
+        ts = time.strftime("%H:%M:%S")
+        with open(LOG_FILE, "a", encoding="utf-8") as f:
+            f.write(f"[{ts}] {msg}\n")
+    except:
         pass
 
-
-def _execute_script(script_path: str):
-    task_id = os.path.splitext(os.path.basename(script_path))[0]
-    result = {
-        "task_id": task_id,
-        "script": script_path,
-        "success": False,
-        "stdout": "",
-        "stderr": "",
-        "error": None,
-        "duration_ms": 0,
-    }
+# ---------------------------------------------------------------------------
+# Script execution
+# ---------------------------------------------------------------------------
+def _execute_script(script_path):
+    """Execute a Python script file and return the result dict."""
     t0 = time.time()
+    result = {"success": False, "stdout": "", "stderr": "", "error": None}
 
-    # Read script
     try:
-        with open(script_path, "r", encoding="utf-8") as fh:
-            source = fh.read()
-    except Exception as exc:
-        result["error"] = f"Failed to read script: {exc}"
-        _write_result(task_id, result)
-        _move_to_done(script_path)
-        return
+        with open(script_path, "r", encoding="utf-8") as f:
+            source = f.read()
+    except Exception as e:
+        result["error"] = f"Read error: {e}"
+        return result
 
-    # Build namespace
     ns = _build_namespace()
-
-    # Capture stdout/stderr
-    old_stdout = sys.stdout
-    old_stderr = sys.stderr
-    capture_out = io.StringIO()
-    capture_err = io.StringIO()
-    sys.stdout = capture_out
-    sys.stderr = capture_err
+    old_out, old_err = sys.stdout, sys.stderr
+    cap_out, cap_err = io.StringIO(), io.StringIO()
+    sys.stdout, sys.stderr = cap_out, cap_err
 
     try:
-        compiled = compile(source, script_path, "exec")
-        exec(compiled, ns)
+        exec(compile(source, script_path, "exec"), ns)
         result["success"] = True
-    except Exception as exc:
-        result["error"] = f"{type(exc).__name__}: {exc}\n{traceback.format_exc()}"
+    except Exception as e:
+        result["error"] = f"{type(e).__name__}: {e}\n{traceback.format_exc()}"
     finally:
-        sys.stdout = old_stdout
-        sys.stderr = old_stderr
-        result["stdout"] = capture_out.getvalue()
-        result["stderr"] = capture_err.getvalue()
-        result["duration_ms"] = round((time.time() - t0) * 1000, 1)
+        sys.stdout, sys.stderr = old_out, old_err
+        result["stdout"] = cap_out.getvalue()
+        result["stderr"] = cap_err.getvalue()
 
-    _write_result(task_id, result)
-    _move_to_done(script_path)
-    _log(f"Executed: {task_id}  success={result['success']}  ms={result['duration_ms']}")
+    result["duration_ms"] = round((time.time() - t0) * 1000, 1)
+    return result
 
 
-def _build_namespace() -> dict:
-    """Return the globals namespace for executed scripts."""
+def _build_namespace():
     return {
-        "adsk": adsk,
-        "core": adsk.core,
-        "fusion": adsk.fusion,
-        "cam": adsk.cam,
+        "adsk": adsk, "core": adsk.core, "fusion": adsk.fusion, "cam": adsk.cam,
+        "HAS_CAM": HAS_CAM,
         "Point3D": adsk.core.Point3D,
         "Vector3D": adsk.core.Vector3D,
         "Matrix3D": adsk.core.Matrix3D,
         "ValueInput": adsk.core.ValueInput,
         "app": _app,
         "ui": _app.userInterface if _app else None,
-        "math": __import__("math"),
-        "json": __import__("json"),
-        "os": __import__("os"),
-        "sys": __import__("sys"),
-        "time": __import__("time"),
-        "OUTPUT_DIR": OUTPUT_DIR,
+        "math": __import__("math"), "json": json, "os": os,
+        "sys": sys, "time": time,
         "__name__": "__fusion_bridge__",
     }
 
 
-def _write_result(task_id: str, result: dict):
-    out_path = os.path.join(OUTPUT_DIR, f"{task_id}.json")
-    try:
-        with open(out_path, "w", encoding="utf-8") as fh:
-            json.dump(result, fh, indent=2, ensure_ascii=False, default=str)
-    except Exception as exc:
-        _log(f"Failed to write result for {task_id}: {exc}")
-
-
-def _move_to_done(script_path: str):
-    try:
-        fname = os.path.basename(script_path)
-        dest = os.path.join(DONE_DIR, fname)
-        if os.path.exists(dest):
-            base, ext = os.path.splitext(fname)
-            dest = os.path.join(DONE_DIR, f"{base}_{int(time.time())}{ext}")
-        shutil.move(script_path, dest)
-    except Exception as exc:
-        _log(f"Failed to move script {script_path}: {exc}")
-
-
 # ---------------------------------------------------------------------------
-# Folder watcher (background thread)
+# Main loop (background thread)
 # ---------------------------------------------------------------------------
+def _bridge_loop():
+    """Watch command file, execute scripts, write results."""
+    global _last_command_mtime
 
-def _watch_folder():
-    _log("Watcher thread started.")
-    seen = set()
+    _log("Bridge v2.0 started — watching command file")
+    _log(f"Command: {COMMAND_FILE}")
+    _log(f"Response: {RESPONSE_FILE}")
 
-    # Seed with files already present
     try:
-        for f in os.listdir(SCRIPTS_DIR):
-            if f.endswith(".py"):
-                seen.add(f)
-    except Exception:
-        pass
+        _last_command_mtime = os.path.getmtime(COMMAND_FILE)
+    except OSError:
+        _last_command_mtime = 0
 
     while _running:
         try:
-            for f in os.listdir(SCRIPTS_DIR):
-                if f.endswith(".py") and f not in seen:
-                    seen.add(f)
-                    full = os.path.join(SCRIPTS_DIR, f)
-                    time.sleep(0.2)  # ensure file write is complete
-                    _script_queue.put(full)
-                    _log(f"Queued: {f}")
-        except Exception as exc:
-            _log(f"Watcher error: {exc}")
-        time.sleep(1.0)
+            current_mtime = os.path.getmtime(COMMAND_FILE)
+            if current_mtime > _last_command_mtime:
+                _last_command_mtime = current_mtime
 
-    _log("Watcher thread stopped.")
+                with open(COMMAND_FILE, "r", encoding="utf-8") as f:
+                    content = f.read().strip()
 
+                if not content:
+                    time.sleep(0.5)
+                    continue
 
-# ---------------------------------------------------------------------------
-# Timer event handler (main thread)
-# ---------------------------------------------------------------------------
+                command = json.loads(content)
+                action = command.get("action", "")
+                task_id = command.get("task_id", "unknown")
 
-class _QueueTimerHandler(adsk.core.TimerEventHandler):
-    def notify(self, args: adsk.core.TimerEventArgs):
-        try:
-            if not _script_queue.empty():
-                path = _script_queue.get_nowait()
-                _execute_script(path)
-        except Exception as exc:
-            _log(f"Timer handler error: {exc}")
+                _log(f"Processing: {task_id} ({action})")
+
+                if action == "execute_script":
+                    script_path = command.get("script_path", "")
+                    result = _execute_script(script_path)
+                    result["task_id"] = task_id
+
+                    with open(RESPONSE_FILE, "w", encoding="utf-8") as f:
+                        json.dump(result, f, indent=2, ensure_ascii=False)
+
+                    try:
+                        os.remove(script_path)
+                    except OSError:
+                        pass
+
+                    _log(f"Done: {task_id} ok={result['success']}")
+
+                elif action == "ping":
+                    with open(RESPONSE_FILE, "w", encoding="utf-8") as f:
+                        json.dump({"pong": True, "version": "2.0"}, f)
+
+                # Clear for next command
+                try:
+                    with open(COMMAND_FILE, "w", encoding="utf-8") as f:
+                        f.write("")
+                    _last_command_mtime = os.path.getmtime(COMMAND_FILE)
+                except OSError:
+                    pass
+
+        except (json.JSONDecodeError, KeyError) as e:
+            _log(f"Parse error: {e}")
+            time.sleep(1)
+        except OSError:
+            time.sleep(1)
+        except Exception as e:
+            _log(f"Error: {e}")
+            time.sleep(1)
+
+        time.sleep(0.5)
+
+    _log("Stopped.")
 
 
 # ---------------------------------------------------------------------------
 # Add-in lifecycle
 # ---------------------------------------------------------------------------
-
 def run(context):
-    """Called by Fusion 360 when the add-in is loaded."""
-    global _running, _timer_handler, _app
+    global _running, _app
 
-    _ensure_dirs()
     _app = adsk.core.Application.get()
+    _log(f"Bridge v2.0 starting — Fusion {_app.version}")
 
-    _log("=" * 60)
-    _log("Bridge Add-in starting up.")
-    _log(f"Bridge root : {BRIDGE_ROOT}")
-    _log(f"Scripts dir : {SCRIPTS_DIR}")
-    _log(f"Output dir  : {OUTPUT_DIR}")
+    for f in (COMMAND_FILE, RESPONSE_FILE):
+        try:
+            os.makedirs(os.path.dirname(f), exist_ok=True)
+            if not os.path.exists(f):
+                with open(f, "w", encoding="utf-8") as fh:
+                    fh.write("")
+        except:
+            pass
 
     _running = True
+    t = threading.Thread(target=_bridge_loop, daemon=True, name="f360-bridge")
+    t.start()
 
-    # Start file-watcher background thread
-    watcher = threading.Thread(
-        target=_watch_folder, daemon=True, name="bridge-watcher"
-    )
-    watcher.start()
+    _log("Ready.")
 
-    # Start processing timer (fires on main thread)
-    ui = _app.userInterface
-    _timer_handler = _QueueTimerHandler()
-    _handlers.append(_timer_handler)  # prevent GC
-    ui.timerEvent.add(_timer_handler, 500)  # 500ms
-
-    _log("Bridge Add-in started.")
+    try:
+        _app.userInterface.messageBox(
+            "Fusion360 Bridge v2.0 active.\nReady to receive commands.",
+            "Fusion360 Bridge"
+        )
+    except:
+        pass
 
 
 def stop(context):
-    """Called by Fusion 360 when the add-in is unloaded."""
-    global _running, _timer_handler
-
+    global _running
     _running = False
-
-    if _timer_handler is not None:
-        try:
-            ui = adsk.core.Application.get().userInterface
-            ui.timerEvent.remove(_timer_handler)
-        except Exception:
-            pass
-        _handlers.remove(_timer_handler)
-        _timer_handler = None
-
-    _log("Bridge Add-in stopped.")
-    _log("=" * 60)
+    _log("Stopped.")

@@ -26,7 +26,6 @@ def run(context):
         root = design.rootComponent
 
         # ---- Step 1: Create Base Plate (root-level component) ----
-        root.name = "Assembly"
         base_sketch = root.sketches.add(root.xYConstructionPlane)
         base_sketch.name = "Base Sketch"
         lines = base_sketch.sketchCurves.sketchLines
@@ -135,6 +134,7 @@ def run(context):
         print("=" * 50)
 
     except:
+        import traceback; traceback.print_exc()
         if ui:
             ui.messageBox('Failed:\n{}'.format(traceback.format_exc()))
 
