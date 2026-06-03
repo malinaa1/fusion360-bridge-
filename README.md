@@ -1,33 +1,27 @@
-# Fusion360 MCP Bridge
+# Fusion360 Bridge — AI 驱动的 CAD 自动化
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Fusion 360](https://img.shields.io/badge/Fusion%20360-v2703-blue)](https://www.autodesk.com/products/fusion-360/)
+[![Fusion 360](https://img.shields.io/badge/Fusion%20360-v2703.1.11-blue)](https://www.autodesk.com/products/fusion-360/)
 
-通过 **MCP (Model Context Protocol)** 将 AI 助手连接到 Fusion 360，实现自然语言驱动的 CAD 建模。
+通过文件桥接让 AI 直接操控 Fusion 360 进行 CAD 建模。
 
 ---
 
 ## 架构
 
 ```
-┌──────────┐  MCP stdio   ┌──────────────┐   file    ┌─────────────────┐
-│ Claude   │ ←──────────→ │ mcp_server/  │ ←──────→ │ Fusion 360      │
-│ (AI)     │  JSON-RPC    │ server.py    │  command │ Add-in (v2.0)   │
-└──────────┘              └──────────────┘          └─────────────────┘
-                            ~/Documents/             单文件监控
-                            fusion360_command.txt    原子读写
-                            fusion360_response.txt   无竞态
+AI / CLI  →  写入命令  →  fusion360_command.txt  →  Fusion 360 Add-in (CustomEvent 主线程)  →  执行脚本
+           读取结果  ←  fusion360_response.txt  ←  写入 JSON
 ```
 
-**相比 v1.0 目录轮询的改进：**
-- MCP 标准协议，Claude Code 原生集成
-- 单文件通信，无 "seen set" 丢失脚本
-- 原子读写，无竞态条件
-- 不会导致 Fusion 360 崩溃
+**v2.1 关键修复：CustomEvent 主线程调度**
+- 后台线程只做文件 I/O
+- 脚本执行通过 CustomEvent 分发到 Fusion 360 主线程
+- **不再崩溃**
 
 ---
 
-## 快速开始
+## 安装
 
 ### 1. 安装 Fusion 360 Add-in
 
@@ -39,27 +33,21 @@ Copy-Item "FusionBridge\*" $dest
 
 重启 Fusion 360 → `Shift+S` → Add-Ins → FusionBridge → Run (勾选 Run on Startup)
 
-### 2. 配置 MCP Server
+### 2. 使用 CLI 发送脚本
 
 ```bash
-python mcp_server/setup_mcp.py install
+python bridge_cli.py send my_script.py --wait
 ```
 
-### 3. 重启 Claude Code
+### 3. 或直接写命令文件
 
-下次启动时，MCP server 自动加载。直接说话即可：
-
-> "在 Fusion 360 里画一个模数 3mm、20 齿的齿轮"
-
----
-
-## MCP 工具列表
-
-| 工具 | 说明 |
-|------|------|
-| `execute_fusion_script` | 执行任意 Fusion 360 Python 脚本 |
-| `get_fusion_status` | 检查 Fusion 360 连接状态 |
-| `create_gear` | 一键创建渐开线齿轮 |
+```python
+import json, os
+cmd = {"action": "execute_script", "script_path": "/path/to/script.py", "task_id": "my_task"}
+with open(os.path.expanduser("~/Documents/fusion360_command.txt"), "w") as f:
+    json.dump(cmd, f)
+# 等待结果: ~/Documents/fusion360_response.txt
+```
 
 ---
 
@@ -67,41 +55,64 @@ python mcp_server/setup_mcp.py install
 
 ```
 fusion360-bridge/
-├── mcp_server/                  # MCP stdio 服务器
-│   ├── server.py                #   主服务器 (Claude Code ↔ Fusion)
-│   └── setup_mcp.py             #   安装/测试/卸载工具
-├── FusionBridge/                # Fusion 360 Add-in (v2.0)
-│   ├── FusionBridge.manifest    #   JSON 格式清单
-│   └── FusionBridge.py          #   单文件命令监控
-├── bridge_cli.py                # CLI 工具 (独立使用)
-├── examples/                    # 示例脚本
-│   ├── create_spur_gear.py      #   渐开线齿轮
-│   ├── create_assembly.py       #   装配体
-│   ├── surface_modeling.py      #   曲面建模
-│   ├── create_drawing.py        #   工程图
-│   ├── cam_toolpath.py          #   CAM 刀路
-│   ├── create_parametric_box.py
-│   ├── batch_export_bodies.py
-│   └── hello_fusion.py
-├── FUSION360_API_GUIDE.md       # API 学习指南
-├── config.json
-└── LICENSE
+├── FusionBridge/                 # Fusion 360 Add-in (v2.1)
+│   ├── FusionBridge.manifest     #
+│   └── FusionBridge.py           #   CustomEvent 主线程执行
+├── bridge_cli.py                 # CLI 工具 & Python SDK
+├── mcp_server/                   # MCP stdio 服务器
+│   ├── server.py                 #   含 create_gear 内置工具
+│   └── setup_mcp.py              #   安装/测试
+├── examples/                     # 示例脚本
+│   ├── create_spur_gear.py       #   渐开线齿轮
+│   ├── create_parametric_box.py  #   参数化方块
+│   ├── create_assembly.py        #   装配体
+│   ├── surface_modeling.py       #   曲面建模
+│   ├── create_drawing.py         #   工程图
+│   ├── cam_toolpath.py           #   CAM 刀路
+│   └── hello_fusion.py           #   连接测试
+├── FUSION360_API_GUIDE.md        # API 学习指南
+└── config.json
 ```
 
 ---
 
-## 故障排除
+## 关键 API 模式
 
-| 问题 | 解决 |
-|------|------|
-| MCP 连接超时 | 确认 Fusion 360 运行且 Add-in 已启动 |
-| 脚本执行无响应 | 检查 `~/Documents/fusion360_command.txt` |
-| Add-in 未加载 | manifest 需 JSON 格式 (Fusion v2703+) |
+```python
+# 入口
+app = adsk.core.Application.get()
+design = adsk.fusion.Design.cast(app.activeProduct)
+root = design.rootComponent
+
+# 草图 → 轮廓 → 拉伸
+sketch = root.sketches.add(root.xYConstructionPlane)
+sketch.sketchCurves.sketchCircles.addByCenterRadius(center, radius)
+extrude = root.features.extrudeFeatures.addSimple(profile, distance, operation)
+
+# Loft（多轮廓放样）
+loft = root.features.loftFeatures.createInput(op)
+loft.loftSections.add(profile1)
+loft.loftSections.add(profile2)
+
+# Sweep（沿路径扫掠）
+path = adsk.fusion.Path.create(curve, options)
+sweep = root.features.sweepFeatures.createInput(profile, path, op)
+
+# Circular Pattern
+coll = adsk.core.ObjectCollection.create(); coll.add(feature)
+pat = root.features.circularPatternFeatures.createInput(coll, axis)
+pat.quantity = ValueInput.createByReal(20)
+```
 
 ---
 
-## 参考项目
+## 踩过的坑
 
-- [fusion360-claude-ultimate](https://github.com/Misterbra/fusion360-claude-ultimate)
-- [fusion-mcp-server](https://github.com/Joe-Spencer/fusion-mcp-server)
-- [fusion360-mcp-server](https://github.com/mycelia1/fusion360-mcp-server)
+| 问题 | 原因 | 解决 |
+|------|------|------|
+| Fusion 崩溃 | `exec()` 在后台线程调用 API | CustomEvent 分发到主线程 |
+| Revolve 失败 | 轮廓与旋转轴相切 | 换 Loft 方案 |
+| Sweep 失败 (ASM_PATH_TANGENT) | 轮廓平面平行于路径方向 | 路径在 XZ → 轮廓用 YZ 平面 |
+| Sweep 失败 (ASM_SELF_INTER) | 曲线曲率太大自交 | 减小曲率 |
+| Manifest 不识别 | 旧 XML 格式 | JSON 格式 (Fusion v2703+) |
+| `import adsk.cam` 失败 | Personal 许可证无 CAM | `try/except ImportError` |
